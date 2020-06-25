@@ -34,13 +34,13 @@ class Helper:
 
     
     def createDictionary(self, ex):
-        '''
         url = "https://hrlanesprodstorage1.blob.core.windows.net/public/master.json"
         master = requests.get(url)
         data = master.json()
         '''
-        with open("C:\\Users\Rashi BHansali\\Desktop\Model\\Build_Model\\master.json") as dataFile:
+        with open("") as dataFile:
             data = json.load(dataFile)
+        '''
         obj_ind = data['IndustryData']
         broad = data['BroadAreaData']
         country = data['countryData']
