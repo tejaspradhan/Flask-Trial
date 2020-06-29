@@ -3,6 +3,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 import io
+import os
 import PyPDF2
 import requests
 import json
@@ -21,7 +22,6 @@ class Helper:
         
         #KEEP ALPHABATES, SPACE
         #LOWER CASE
-
         lemmatizer = WordNetLemmatizer()
         text = re.sub('[^A-Za-z ]+', ' ', text).lower()
         tokens = word_tokenize(text)
@@ -34,13 +34,10 @@ class Helper:
 
     
     def createDictionary(self, ex):
+        
         url = "https://hrlanesprodstorage1.blob.core.windows.net/public/master.json"
         master = requests.get(url)
         data = master.json()
-        '''
-        with open("") as dataFile:
-            data = json.load(dataFile)
-        '''
         obj_ind = data['IndustryData']
         broad = data['BroadAreaData']
         country = data['countryData']
@@ -144,28 +141,31 @@ class Helper:
         return d
 
     def create_tfidf(self, name, documents, included):
-        with open(str(name)+"doc_included.list", "wb+") as fp:
-            pickle.dump(included, fp)
-        dictionary = gensim.corpora.Dictionary(documents)
-        with open(str(name)+"resume.dict", "wb+") as fp:
-            pickle.dump(dictionary, fp)
-        corpus = [dictionary.doc2bow(text) for text in documents]
-        model = gensim.models.TfidfModel(corpus)
-        model.save(str(name)+"tfidf.model")
-        index_tmpfile = get_tmpfile('similarity_object')
-        similarity_object = gensim.similarities.Similarity(index_tmpfile,model[corpus],num_features=len(dictionary))
-        similarity_object.save(str(name)+'similarity_index')
-        
+        try:
+            dictionary = gensim.corpora.Dictionary(documents)
+            with open(str(name)+"_resume.dict", "wb+") as fp:
+                pickle.dump(dictionary, fp)
+            corpus = [dictionary.doc2bow(text) for text in documents]
+            model = gensim.models.TfidfModel(corpus)
+            model.save(str(name)+"_tfidf.model")
+            index_tmpfile = get_tmpfile('similarity_object')
+            similarity_object = gensim.similarities.Similarity(index_tmpfile,model[corpus],num_features=len(dictionary))
+            similarity_object.save(str(name)+'_similarity_index.0')
+            with open(str(name)+"_doc_included.list", "wb+") as fp:
+                pickle.dump(included, fp)
+        except:
+            pass
     def recommend(self, ex, fn, cleanToken):
         '''
             Function takes in experience, functional area, tokenized job description and recommends candidate IDs
         '''
         name = (int(fn), int(ex))
         try:
-            dictionary = gensim.corpora.Dictionary.load(""+str(name)+"resume.dict")
-            model = gensim.models.TfidfModel.load(""+str(name)+"tfidf.model")
-            similarity_obj = gensim.similarities.Similarity.load(""+str(name)+"similarity_index")
-            doc_included = list(pickle.load(open(""+str(name)+"doc_included.list", "rb+")))
+            path = os.getcwd()+"\\"
+            dictionary = gensim.corpora.Dictionary.load(path+str(name)+"_resume.dict")
+            model = gensim.models.TfidfModel.load(path+str(name)+"_tfidf.model")
+            similarity_obj = gensim.similarities.Similarity.load(path+str(name)+"_similarity_index.0")
+            doc_included = list(pickle.load(open(path+str(name)+"_doc_included.list", "rb+")))
             cleaned_bow = dictionary.doc2bow(cleanToken) #bag of words of job description
             cleaned_tfidf = model[cleaned_bow] #tfidf of JD
 
