@@ -1,7 +1,9 @@
 import re
+import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from nltk.stem import WordNetLemmatizer
 import io
 import os
 import PyPDF2
@@ -22,22 +24,24 @@ class Helper:
         
         #KEEP ALPHABATES, SPACE
         #LOWER CASE
-        lemmatizer = WordNetLemmatizer()
         text = re.sub('[^A-Za-z ]+', ' ', text).lower()
         tokens = word_tokenize(text)
         cleanToken = []
         for token in tokens:
             if(token not in self.stop_words):
                 cleanToken.append(token)
-        cleanToken = [lemmatizer.lemmatize(x) for x in cleanToken]
         return cleanToken
 
     
     def createDictionary(self, ex):
-        
+        '''
         url = "https://hrlanesprodstorage1.blob.core.windows.net/public/master.json"
         master = requests.get(url)
         data = master.json()
+        '''
+        path = os.getcwd()+"/"
+        with open(path+"master.json", encoding='utf-8') as dataFile:
+            data = json.load(dataFile)
         obj_ind = data['IndustryData']
         broad = data['BroadAreaData']
         country = data['countryData']
@@ -135,33 +139,32 @@ class Helper:
                 e = item['ProfileSummaryInfo']['ExperienceLevel']
                 for i in range(len(item['ProfileSummaryInfo']['FunctionalAreas'])):
                     fid = item['ProfileSummaryInfo']['FunctionalAreas'][i]['Funct_id']
-                    if (fid, e) not in d:
+                    if (fid,e) not in d:
                         d[(fid,e)] = []
-                    d[(fid, e)].append((item['_id'], text))
+                    d[(fid,e)].append((item['_id'], text))
         return d
 
     def create_tfidf(self, name, documents, included):
-        try:
-            dictionary = gensim.corpora.Dictionary(documents)
-            with open(str(name)+"_resume.dict", "wb+") as fp:
-                pickle.dump(dictionary, fp)
-            corpus = [dictionary.doc2bow(text) for text in documents]
-            model = gensim.models.TfidfModel(corpus)
-            model.save(str(name)+"_tfidf.model")
-            index_tmpfile = get_tmpfile('similarity_object')
-            similarity_object = gensim.similarities.Similarity(index_tmpfile,model[corpus],num_features=len(dictionary))
-            similarity_object.save(str(name)+'_similarity_index.0')
-            with open(str(name)+"_doc_included.list", "wb+") as fp:
-                pickle.dump(included, fp)
-        except:
-            pass
+        path = os.getcwd()+"/"
+        dictionary = gensim.corpora.Dictionary(documents)
+        with open(path+str(name)+"_resume.dict", "wb+") as fp:
+            pickle.dump(dictionary, fp)
+        corpus = [dictionary.doc2bow(text) for text in documents]
+        model = gensim.models.TfidfModel(corpus)
+        model.save(path+str(name)+"_tfidf.model")
+        index_tmpfile = get_tmpfile('similarity_object')
+        similarity_object = gensim.similarities.Similarity(index_tmpfile,model[corpus],num_features=len(dictionary))
+        similarity_object.save(path+str(name)+'_similarity_index.0')
+        with open(path+str(name)+"_doc_included.list", "wb+") as fp:
+            pickle.dump(included, fp)
+           
     def recommend(self, ex, fn, cleanToken):
         '''
             Function takes in experience, functional area, tokenized job description and recommends candidate IDs
         '''
-        name = (int(fn), int(ex))
+        name = (int(fn),int(ex))
         try:
-            path = os.getcwd()+"\\"
+            path = os.getcwd()+"/"
             dictionary = gensim.corpora.Dictionary.load(path+str(name)+"_resume.dict")
             model = gensim.models.TfidfModel.load(path+str(name)+"_tfidf.model")
             similarity_obj = gensim.similarities.Similarity.load(path+str(name)+"_similarity_index.0")
