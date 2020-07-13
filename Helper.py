@@ -14,6 +14,9 @@ from pymongo import MongoClient
 import pickle 
 import gensim
 from gensim.test.utils import get_tmpfile
+from datetime import date, timedelta
+from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+import docx2txt
 
 class Helper:
     def __init__(self):
@@ -39,9 +42,10 @@ class Helper:
         master = requests.get(url)
         data = master.json()
         '''
-        path = os.getcwd()+"/"
+        path = os.getcwd()+"\\"
         with open(path+"master.json", encoding='utf-8') as dataFile:
             data = json.load(dataFile)
+        
         obj_ind = data['IndustryData']
         broad = data['BroadAreaData']
         country = data['countryData']
@@ -64,11 +68,13 @@ class Helper:
         for i in farea:
             for j in exp:
                 hard_filter.append((i,j))
-
-        d = {}
-        for filter in hard_filter:
-            d[filter] = []
-
+        try:
+            d = pickle.load("dictionary.pkl", "rb+")
+        except:
+            d = {}
+            for filter in hard_filter:
+                d[filter] = []
+        
         for item in ex:
             text = ''
             if 'ProfileName' in item['ProfileSummaryInfo']:
@@ -141,11 +147,11 @@ class Helper:
                     fid = item['ProfileSummaryInfo']['FunctionalAreas'][i]['Funct_id']
                     if (fid,e) not in d:
                         d[(fid,e)] = []
-                    d[(fid,e)].append((item['_id'], text))
+                    d[(fid,e)].append((item['_id'], self.cleanTextAndTokenize(text)))
         return d
 
     def create_tfidf(self, name, documents, included):
-        path = os.getcwd()+"/"
+        path = os.getcwd()+"\\active\\"  #forward slash
         dictionary = gensim.corpora.Dictionary(documents)
         with open(path+str(name)+"_resume.dict", "wb+") as fp:
             pickle.dump(dictionary, fp)
@@ -164,7 +170,7 @@ class Helper:
         '''
         name = (int(fn),int(ex))
         try:
-            path = os.getcwd()+"/"
+            path = os.getcwd()+"\\active\\"  #forward slash
             dictionary = gensim.corpora.Dictionary.load(path+str(name)+"_resume.dict")
             model = gensim.models.TfidfModel.load(path+str(name)+"_tfidf.model")
             similarity_obj = gensim.similarities.Similarity.load(path+str(name)+"_similarity_index.0")
@@ -186,14 +192,37 @@ class Helper:
             return []    
     def extract_text_from_url(self, url):
         try:
-            r = requests.get(url)
-            f = io.BytesIO(r.content)
-            reader = PyPDF2.PdfFileReader(f)
-            pages =  reader.getNumPages()
-            pdftext = ''
-            for i in range(pages): 
-                pdftext += reader.getPage(i).extractText()
-            return pdftext
+            if(url.endswith('.pdf')):
+                r = requests.get(url)
+                f = io.BytesIO(r.content)
+                reader = PyPDF2.PdfFileReader(f)
+                pages =  reader.getNumPages()
+                text = ''
+                for i in range(pages): 
+                    text += reader.getPage(i).extractText()
+                return text
+            elif(url.endswith('.docx')):
+                text+= docx2txt.process(url).decode('utf8')
+                return text
         except:
-            pdftext+=' '
-            return pdftext    
+            text+=' '
+            return text    
+
+    def create_backup(self):
+        #upload files from local to blob
+        yesterday = str(date.today() - timedelta(days=1))
+        connect_str = "DefaultEndpointsProtocol=https;AccountName=hrlanesprodstorage1;AccountKey=uMn+xHl9M/BPjlduv2UORBzY8PUeitrL264NI04Y9qS+XzB0W30EyCj9Sa3z9vtrnMWb3GZqFhWqifN5TSmH/g==;EndpointSuffix=core.windows.net"
+        # Create the BlobServiceClient object which will be used to create a container client
+        blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+        path = os.getcwd()+'\\active\\'
+        files= []
+        for r, d, f in os.walk(path):
+            for filename in f:
+                blob_client = blob_service_client.get_blob_client(container='cand-recom', blob = yesterday+"/"+filename)
+                with open(os.path.join(r, filename), "rb") as data:
+                   blob_client.upload_blob(data)
+        
+        #run build model
+        #save new files on local (create tfidf does this)
+        
+
