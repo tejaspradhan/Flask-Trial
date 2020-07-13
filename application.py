@@ -5,6 +5,7 @@ from flask import request
 from flask import json
 import pymongo
 import os
+import pickle
 
 app = Flask(__name__)
 @app.route("/")
@@ -12,12 +13,21 @@ app = Flask(__name__)
 def build_model():
     method = request.args.get('method')
     if method == 'build':
+        helper = Helper()
+        if not os.path.exists('active'):
+            os.makedirs('active')
+        else:
+            helper.create_backup()
+        
         connection = MongoClient('mongodb+srv://hrlanes-mongodb-reader:hrlanes%401234@hrlanes-production-i5mve.mongodb.net', 27017)
         db = connection['hrlanes-web-db']
         data = db['users']
         ex = data.find({"$and": [{'ProfileSummaryInfo': {"$exists": True}}, {'recommenderProcessed': {"$exists": True}}, {'recommenderProcessed': True }]})
-        helper = Helper()
+        
         d = helper.createDictionary(ex)
+        path = os.getcwd()+"\\active\\"
+        with open(path+"dictionary.pkl", "wb") as output:
+            pickle.dump(d, output)
         resumeList = []
         for key in d:
             if len(d[key])>0:  # check if resumes/details exist 
@@ -27,22 +37,20 @@ def build_model():
                     doc_included.append(x[0])
                 documents = []
                 for f in resumeList:
-                    documents.append(helper.cleanTextAndTokenize(f))
+                    documents.append(f)
                     helper.create_tfidf(str(key), documents, doc_included)
-        return ""
+        #reset recommenderProcessed to false
+        '''filter  = {"$and": [{'ProfileSummaryInfo': {"$exists": True}}, {'recommenderProcessed': {"$exists": True}}, {'recommenderProcessed': True }]}
+        data.update_many(filter, {"$set": { "recommenderProcessed": False }})
+        '''
+        return 'okay'
     elif method == 'recommend':
         exp = request.args.get('e')
         farea = request.args.get('f')
         jd = request.args.get('jd')
         if exp and farea and jd:
             helper = Helper()
-            '''with open (jd, 'r') as f:
-                jobd = f.read()
-            #for local storage path
-        
-            jobd = helper.extract_text_from_url(jd) 
-            #for extracting text from pdf url -> from blob storage
-            '''
+            jobd = helper.extract_text_from_url(jd)  #for extracting text from pdf url -> from blob storage
             jobd = str(jd)
             preprocessed = helper.cleanTextAndTokenize(jobd) #tokenizing text
             sim_scores = helper.recommend(exp, farea, preprocessed) #returning candidate IDs
